@@ -1,0 +1,31 @@
+# Black 配置
+[tool.black]
+line-length = 120
+skip-string-normalization = true
+
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "catia-mcp-service"
+version = "0.1.0"
+description = "基于 pycatia 的 CATIA 自动化 REST API 服务"
+authors = [
+	{ name = "chenlei-gh" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+	"pycatia>=0.8.2,<1.0.0",
+	"flask>=2.0.1,<3.0.0",
+	"python-dotenv>=0.19.0,<1.0.0",
+	"flask-restful>=0.3.9,<1.0.0",
+	"flask-cors>=3.0.10,<4.0.0",
+	"flask-jwt-extended>=4.3.1,<5.0.0",
+	"pydantic>=1.9.0,<2.0.0",
+	"python-multipart>=0.0.5,<1.0.0"
+]
+
+[tool.setuptools.packages.find]
+where = ["catia_mcp_service"]

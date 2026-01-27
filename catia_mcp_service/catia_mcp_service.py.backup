@@ -1,0 +1,773 @@
+# ========== Webhook/回调支持 ==========
+import threading
+import requests
+import os
+from flask import send_file
+
+
+def trigger_webhook(url, payload):
+    def _send():
+        try:
+            requests.post(url, json=payload, timeout=5)
+        except Exception as e:
+            logger.warning(f'Webhook failed: {e}')
+    threading.Thread(target=_send, daemon=True).start()
+
+# ========== 异步任务接口示例 ==========
+from flask import Response
+import uuid
+tasks = {}
+
+@app.route('/api/async/long_task', methods=['POST'])
+@jwt_required()
+def long_task():
+    user = get_jwt_identity()
+    task_id = str(uuid.uuid4())
+    def do_work():
+        import time
+        time.sleep(5)
+        tasks[task_id] = {'status': 'done', 'result': 'ok'}
+        # 可在此触发 webhook
+    tasks[task_id] = {'status': 'running'}
+    threading.Thread(target=do_work, daemon=True).start()
+    return jsonify({'task_id': task_id})
+
+@app.route('/api/async/task_status/<task_id>', methods=['GET'])
+@jwt_required()
+def task_status(task_id):
+    return jsonify(tasks.get(task_id, {'status': 'not_found'}))
+
+# ========== Python SDK 入口雏形 ==========
+
+# ========== Python SDK 完善 ==========
+class CatiaMcpClient:
+    def __init__(self, base_url, token):
+        self.base_url = base_url
+        self.token = token
+    def _post(self, path, data):
+        return requests.post(f'{self.base_url}{path}', json=data, headers={'Authorization': f'Bearer {self.token}'}).json()
+    def _get(self, path, params=None):
+        return requests.get(f'{self.base_url}{path}', params=params, headers={'Authorization': f'Bearer {self.token}'}).json()
+    def batch_set_parameters(self, params):
+        return self._post('/api/batch/set_parameters', {'parameters': params})
+    def export_to_format(self, file_path, export_path, fmt):
+        return self._post('/api/convert/export', {'file_path': file_path, 'export_path': export_path, 'fmt': fmt})
+    def create_sketch(self, plane):
+        return self._post('/api/sketch/create', {'plane': plane})
+    def draw_point(self, sketch, x, y):
+        return self._post('/api/sketch/point', {'sketch': sketch, 'x': x, 'y': y})
+    def draw_line(self, sketch, x1, y1, x2, y2):
+        return self._post('/api/sketch/line', {'sketch': sketch, 'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2})
+    def list_assembly_tree(self):
+        return self._get('/api/assembly/tree')
+    def get_part_property(self, prop):
+        return self._get('/api/part/property', {'prop': prop})
+    def set_part_property(self, prop, value):
+        return self._post('/api/part/property/set', {'prop': prop, 'value': value})
+    def set_material(self, material):
+        return self._post('/api/part/material', {'material': material})
+    def set_color(self, r, g, b):
+        return self._post('/api/part/color', {'r': r, 'g': g, 'b': b})
+    def capture_image(self, file_path='catia_capture.png', fmt='png'):
+        return self._post('/api/image/capture', {'file_path': file_path, 'fmt': fmt})
+    def download_image(self, file):
+        return requests.get(f'{self.base_url}/api/image/download', params={'file': file}, headers={'Authorization': f'Bearer {self.token}'})
+# ========== 命令行工具 ==========
+import argparse
+def main():
+    parser = argparse.ArgumentParser(description='CATIA MCP CLI')
+    parser.add_argument('--info', action='store_true', help='Show API info')
+    parser.add_argument('--health', action='store_true', help='Check health')
+    parser.add_argument('--metrics', action='store_true', help='Show metrics')
+    args = parser.parse_args()
+    import requests
+    base_url = 'http://localhost:5000'
+    if args.info:
+        print(requests.get(f'{base_url}/api/v1/info').json())
+    if args.health:
+        print(requests.get(f'{base_url}/health').json())
+    if args.metrics:
+        print(requests.get(f'{base_url}/metrics').json())
+
+if __name__ == '__main__':
+    main()
+# ========== API 版本管理 ==========
+from flask import Blueprint
+
+v1 = Blueprint('v1', __name__)
+@app.route('/api/v1/info')
+def api_v1_info():
+    return jsonify({'version': 'v1', 'desc': 'CATIA MCP API v1'})
+
+# ========== 健康检查接口 ==========
+@app.route('/health', methods=['GET'])
+
+def health():
+    return jsonify({'status': 'ok', 'message': 'CATIA MCP service running'})
+
+@app.route('/metrics', methods=['GET'])
+def metrics():
+    import psutil
+    return jsonify({
+        'cpu_percent': psutil.cpu_percent(),
+        'memory': psutil.virtual_memory()._asdict(),
+        'disk': psutil.disk_usage('/')._asdict()
+    })
+
+# ========== 详细错误码和错误信息 ==========
+import gettext
+_ = gettext.gettext
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    code = 500
+    msg = str(e)
+    if hasattr(e, 'code'):
+        code = e.code
+    # 国际化错误信息
+    return jsonify({'error': {'code': code, 'message': _(msg)}}), code
+
+# ========== Swagger UI 入口 ==========
+@app.route('/docs')
+def docs():
+    return '''<html><head><meta http-equiv="refresh" content="0; url=/swagger" /></head><body>Redirecting to <a href="/swagger">Swagger UI</a></body></html>'''
+# 迁移自 catia_mcp_service.py
+from flask import Flask, request, jsonify
+from flask_restful import Api, Resource
+from flask_cors import CORS
+from flask_jwt_extended import JWTManager, jwt_required
+import pycatia
+import os
+from dotenv import load_dotenv
+from datetime import timedelta
+import logging
+from typing import Dict, List, Any, Optional, Union
+import json
+
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('catia_mcp.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# 加载环境变量
+load_dotenv()
+
+app = Flask(__name__)
+CORS(app)
+api = Api(app)
+
+# JWT配置
+app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'your-secret-key')
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+jwt = JWTManager(app)
+
+class CATIAService:
+                        # ========== 图片功能 ==========
+                        def capture_image(self, file_path: str = 'catia_capture.png', fmt: str = 'png') -> str:
+                            try:
+                                if not self.catia or not hasattr(self.catia, 'active_window'):
+                                    return 'fail: CATIA未连接或无活动窗口'
+                                win = self.catia.active_window
+                                if fmt.lower() not in ('png', 'jpg', 'jpeg', 'bmp'):
+                                    return 'fail: 不支持的图片格式'
+                                win.capture_to_file(file_path)
+                                return file_path
+                            except Exception as e:
+                                return f'fail: {e}'
+                    # ========== 图片API ==========
+                    class CaptureImage(Resource):
+                        @jwt_required()
+                        @role_required('admin')
+                        def post(self):
+                            data = request.get_json()
+                            file_path = data.get('file_path', 'catia_capture.png')
+                            fmt = data.get('fmt', 'png')
+                            service = CATIAService()
+                            service.connect()
+                            result = service.capture_image(file_path, fmt)
+                            if result.startswith('fail:'):
+                                return jsonify({'result': result})
+                            # 返回图片下载链接
+                            return jsonify({'result': 'ok', 'file': file_path, 'url': f'/api/image/download?file={os.path.basename(file_path)}'})
+
+                    @app.route('/api/image/download')
+                    @jwt_required()
+                    @role_required('admin')
+                    def download_image():
+                        file = request.args.get('file')
+                        if not file or not os.path.exists(file):
+                            return jsonify({'result': 'fail: 文件不存在'}), 404
+                        return send_file(file, as_attachment=True)
+
+                    api.add_resource(CaptureImage, '/api/image/capture')
+                    # ========== CATIA对象操作 ==========
+                    def list_assembly_tree(self) -> Any:
+                        try:
+                            if not self.product:
+                                return 'fail: no product loaded'
+                            def walk(prod):
+                                node = {'name': prod.name, 'children': []}
+                                for i in range(1, prod.products.count + 1):
+                                    child = prod.products.item(i)
+                                    node['children'].append(walk(child))
+                                return node
+                            return walk(self.product)
+                        except Exception as e:
+                            return f'fail: {e}'
+
+                    def get_part_property(self, prop: str) -> Any:
+                        try:
+                            if not self.part:
+                                return 'fail: no part loaded'
+                            return getattr(self.part, prop, 'fail: property not found')
+                        except Exception as e:
+                            return f'fail: {e}'
+
+                    def set_part_property(self, prop: str, value: Any) -> str:
+                        try:
+                            if not self.part:
+                                return 'fail: no part loaded'
+                            setattr(self.part, prop, value)
+                            self.part.update()
+                            return 'ok'
+                        except Exception as e:
+                            return f'fail: {e}'
+
+                    def set_material(self, material_name: str) -> str:
+                        try:
+                            if not self.part:
+                                return 'fail: no part loaded'
+                            # 伪代码，实际pycatia需支持材料库API
+                            self.part.material = material_name
+                            self.part.update()
+                            return 'ok'
+                        except Exception as e:
+                            return f'fail: {e}'
+
+                    def set_color(self, r: int, g: int, b: int) -> str:
+                        try:
+                            if not self.part:
+                                return 'fail: no part loaded'
+                            # 伪代码，实际pycatia需支持颜色API
+                            self.part.color = (r, g, b)
+                            self.part.update()
+                            return 'ok'
+                        except Exception as e:
+                            return f'fail: {e}'
+                # ========== CATIA对象操作API ==========
+                class ListAssemblyTree(Resource):
+                    @jwt_required()
+                    @role_required('admin')
+                    def get(self):
+                        service = CATIAService()
+                        service.connect()
+                        result = service.list_assembly_tree()
+                        return jsonify({'result': result})
+
+                class GetPartProperty(Resource):
+                    @jwt_required()
+                    @role_required('admin')
+                    def get(self):
+                        prop = request.args.get('prop')
+                        service = CATIAService()
+                        service.connect()
+                        result = service.get_part_property(prop)
+                        return jsonify({'result': result})
+
+                class SetPartProperty(Resource):
+                    @jwt_required()
+                    @role_required('admin')
+                    def post(self):
+                        data = request.get_json()
+                        prop = data.get('prop')
+                        value = data.get('value')
+                        service = CATIAService()
+                        service.connect()
+                        result = service.set_part_property(prop, value)
+                        return jsonify({'result': result})
+
+                class SetMaterial(Resource):
+                    @jwt_required()
+                    @role_required('admin')
+                    def post(self):
+                        data = request.get_json()
+                        material = data.get('material')
+                        service = CATIAService()
+                        service.connect()
+                        result = service.set_material(material)
+                        return jsonify({'result': result})
+
+                class SetColor(Resource):
+                    @jwt_required()
+                    @role_required('admin')
+                    def post(self):
+                        data = request.get_json()
+                        r, g, b = data.get('r'), data.get('g'), data.get('b')
+                        service = CATIAService()
+                        service.connect()
+                        result = service.set_color(r, g, b)
+                        return jsonify({'result': result})
+
+                api.add_resource(ListAssemblyTree, '/api/assembly/tree')
+                api.add_resource(GetPartProperty, '/api/part/property')
+                api.add_resource(SetPartProperty, '/api/part/property/set')
+                api.add_resource(SetMaterial, '/api/part/material')
+                api.add_resource(SetColor, '/api/part/color')
+                # ========== 草图与几何基础建模 ==========
+                def create_sketch(self, plane_name: str) -> str:
+                    """在指定平面/面上创建新草图，返回草图名。"""
+                    try:
+                        if not self.part:
+                            return 'fail: no part loaded'
+                        plane = getattr(self.part.origin_elements, plane_name, None)
+                        if not plane:
+                            return f'fail: plane {plane_name} not found'
+                        sketches = self.part.sketches
+                        sketch = sketches.add(plane)
+                        self.part.update()
+                        return sketch.name
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def draw_point(self, sketch_name: str, x: float, y: float) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        factory.create_point(x, y)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def draw_line(self, sketch_name: str, x1: float, y1: float, x2: float, y2: float) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        factory.create_line(x1, y1, x2, y2)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def draw_circle(self, sketch_name: str, x: float, y: float, r: float) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        factory.create_circle(x, y, r)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def draw_rectangle(self, sketch_name: str, x: float, y: float, w: float, h: float) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        # 以左下角为基点
+                        factory.create_line(x, y, x + w, y)
+                        factory.create_line(x + w, y, x + w, y + h)
+                        factory.create_line(x + w, y + h, x, y + h)
+                        factory.create_line(x, y + h, x, y)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def draw_ellipse(self, sketch_name: str, x: float, y: float, rx: float, ry: float) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        factory.create_ellipse(x, y, rx, ry)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def delete_sketch_element(self, sketch_name: str, element_index: int) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        factory = sketch.open_edition()
+                        elems = sketch.projection_elements
+                        if element_index < 0 or element_index >= elems.count:
+                            return 'fail: index out of range'
+                        elem = elems.item(element_index + 1)
+                        factory.delete_element(elem)
+                        sketch.close_edition()
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def add_constraint(self, sketch_name: str, constraint_type: str, *args) -> str:
+                    try:
+                        sketch = self._find_sketch(sketch_name)
+                        if not sketch:
+                            return 'fail: sketch not found'
+                        constraints = sketch.constraints
+                        # 这里只做简单示例，实际应根据 constraint_type 和 args 处理
+                        if constraint_type == 'distance':
+                            c = constraints.add_distance(*args)
+                        elif constraint_type == 'coincidence':
+                            c = constraints.add_coincidence(*args)
+                        else:
+                            return 'fail: unsupported constraint type'
+                        self.part.update()
+                        return 'ok'
+                    except Exception as e:
+                        return f'fail: {e}'
+
+                def _find_sketch(self, sketch_name: str):
+                    if not self.part or not self.part.sketches:
+                        return None
+                    for s in self.part.sketches:
+                        if s.name == sketch_name:
+                            return s
+                    return None
+            # ========== 草图建模API接口 ==========
+            class CreateSketch(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    plane = data.get('plane')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.create_sketch(plane)
+                    return jsonify({'result': result})
+
+            class DrawPoint(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    x, y = data.get('x'), data.get('y')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.draw_point(sketch, x, y)
+                    return jsonify({'result': result})
+
+            class DrawLine(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    x1, y1, x2, y2 = data.get('x1'), data.get('y1'), data.get('x2'), data.get('y2')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.draw_line(sketch, x1, y1, x2, y2)
+                    return jsonify({'result': result})
+
+            class DrawCircle(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    x, y, r = data.get('x'), data.get('y'), data.get('r')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.draw_circle(sketch, x, y, r)
+                    return jsonify({'result': result})
+
+            class DrawRectangle(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    x, y, w, h = data.get('x'), data.get('y'), data.get('w'), data.get('h')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.draw_rectangle(sketch, x, y, w, h)
+                    return jsonify({'result': result})
+
+            class DrawEllipse(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    x, y, rx, ry = data.get('x'), data.get('y'), data.get('rx'), data.get('ry')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.draw_ellipse(sketch, x, y, rx, ry)
+                    return jsonify({'result': result})
+
+            class DeleteSketchElement(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    idx = data.get('index')
+                    service = CATIAService()
+                    service.connect()
+                    result = service.delete_sketch_element(sketch, idx)
+                    return jsonify({'result': result})
+
+            class AddConstraint(Resource):
+                @jwt_required()
+                @role_required('admin')
+                def post(self):
+                    data = request.get_json()
+                    sketch = data.get('sketch')
+                    ctype = data.get('type')
+                    args = data.get('args', [])
+                    service = CATIAService()
+                    service.connect()
+                    result = service.add_constraint(sketch, ctype, *args)
+                    return jsonify({'result': result})
+
+            api.add_resource(CreateSketch, '/api/sketch/create')
+            api.add_resource(DrawPoint, '/api/sketch/point')
+            api.add_resource(DrawLine, '/api/sketch/line')
+            api.add_resource(DrawCircle, '/api/sketch/circle')
+            api.add_resource(DrawRectangle, '/api/sketch/rectangle')
+            api.add_resource(DrawEllipse, '/api/sketch/ellipse')
+            api.add_resource(DeleteSketchElement, '/api/sketch/delete_element')
+            api.add_resource(AddConstraint, '/api/sketch/constraint')
+            def export_to_format(self, file_path: str, export_path: str, fmt: str) -> str:
+                """将CATIA文档导出为指定格式（step/iges/stl），返回结果。"""
+                try:
+                    doc = self.documents.open(file_path)
+                    # 这里只做伪代码，实际pycatia需支持相关API
+                    if fmt.lower() == 'step':
+                        doc.save_as(export_path + '.step')
+                    elif fmt.lower() == 'iges':
+                        doc.save_as(export_path + '.iges')
+                    elif fmt.lower() == 'stl':
+                        doc.save_as(export_path + '.stl')
+                    else:
+                        return f'fail: unsupported format {fmt}'
+                    doc.close()
+                    return 'ok'
+                except Exception as e:
+                    return f'fail: {e}'
+        # ========== 多用户与权限粒度 ========== 
+        from flask_jwt_extended import get_jwt_identity, get_jwt
+        from functools import wraps
+
+        def role_required(role):
+            def decorator(fn):
+                @wraps(fn)
+                def wrapper(*args, **kwargs):
+                    claims = get_jwt()
+                    if claims.get('role') != role:
+                        return jsonify({'msg': 'Insufficient permissions'}), 403
+                    return fn(*args, **kwargs)
+                return wrapper
+            return decorator
+        # ========== 操作日志与审计 ========== 
+        def audit_log(user, action, detail=None):
+            logger.info(f"AUDIT user={user} action={action} detail={detail}")
+        # ========== OpenAPI/Swagger 文档支持 ==========
+        from flask_restful_swagger_2 import Api as SwaggerApi, swagger, Schema
+        api = SwaggerApi(app, api_version='1.0', title='CATIA MCP API')
+        def set_parameters_batch(self, params: Dict[str, Any]) -> Dict[str, Any]:
+            """批量设置参数，返回每个参数的设置结果。"""
+            results = {}
+            if not self.parameters:
+                return {k: 'No parameters object' for k in params}
+            for name, value in params.items():
+                try:
+                    param = self.parameters.item(name)
+                    param.value = value
+                    results[name] = 'ok'
+                except Exception as e:
+                    results[name] = f'fail: {e}'
+            return results
+
+        def export_documents_batch(self, file_paths: List[str], export_dir: str) -> Dict[str, Any]:
+            """批量导出文档到指定目录，返回每个文件的导出结果。"""
+            results = {}
+            for file_path in file_paths:
+                try:
+                    doc = self.documents.open(file_path)
+                    base = os.path.basename(file_path)
+                    export_path = os.path.join(export_dir, base)
+                    doc.save_as(export_path)
+                    doc.close()
+                    results[file_path] = 'ok'
+                except Exception as e:
+                    results[file_path] = f'fail: {e}'
+            return results
+    def __init__(self):
+        self.catia = None
+        self.documents = None
+        self.part_document = None
+        self.part = None
+        self.hybrid_bodies = None
+        self.parameters = None
+        self.sketches = None
+        self.bodies = None
+        self.measure = None
+        self.analysis = None
+        self.drawing = None
+        self.product = None
+        self.system = None
+        
+    def connect(self):
+        try:
+            self.catia = pycatia.catia_application()
+            self.documents = self.catia.documents
+            self.system = self.catia.system
+            return True
+        except Exception as e:
+            logger.error(f"连接CATIA失败: {str(e)}")
+            return False
+
+    def open_document(self, file_path: str) -> bool:
+        try:
+            self.part_document = self.documents.open(file_path)
+            self._initialize_document_objects()
+            return True
+        except Exception as e:
+            logger.error(f"打开文档失败: {str(e)}")
+            return False
+
+    def _initialize_document_objects(self):
+        """初始化文档相关的对象"""
+        if self.part_document:
+            if self.part_document.type == "Part":
+                self.part = self.part_document.part
+                self.hybrid_bodies = self.part.hybrid_bodies
+                self.parameters = self.part.parameters
+                self.sketches = self.part.sketches
+                self.bodies = self.part.bodies
+                self.measure = self.part.measure
+                self.analysis = self.part.analysis
+            elif self.part_document.type == "Product":
+                self.product = self.part_document.product
+            elif self.part_document.type == "Drawing":
+                self.drawing = self.part_document.drawing
+
+    # 基础文档操作
+    def create_new_document(self, doc_type: str) -> tuple[bool, str]:
+        try:
+            if doc_type == "Part":
+                self.part_document = self.documents.add("Part")
+            elif doc_type == "Product":
+                self.part_document = self.documents.add("Product")
+            elif doc_type == "Drawing":
+                self.part_document = self.documents.add("Drawing")
+            else:
+                return False, "不支持的文档类型"
+            self._initialize_document_objects()
+            return True, "文档创建成功"
+        except Exception as e:
+            logger.error(f"创建文档失败: {str(e)}")
+            return False, str(e)
+
+
+# ========== RESTful API 批量操作接口示例 ==========
+class BatchSetParameters(Resource):
+    @swagger.doc({
+        'tags': ['Batch'],
+        'description': '批量设置参数',
+        'parameters': [{
+            'name': 'body',
+            'description': '参数字典',
+            'in': 'body',
+            'schema': {'type': 'object'}
+        }],
+        'responses': {
+            '200': {'description': '批量设置结果'}
+        }
+    })
+    @jwt_required()
+    @role_required('admin')
+    def post(self):
+        user = get_jwt_identity()
+        data = request.get_json()
+        params = data.get('parameters', {})
+        service = CATIAService()
+        service.connect()
+        result = service.set_parameters_batch(params)
+        audit_log(user, 'batch_set_parameters', params)
+        return jsonify(result)
+
+class BatchExportDocuments(Resource):
+    @swagger.doc({
+        'tags': ['Batch'],
+        'description': '批量导出文档',
+        'parameters': [{
+            'name': 'body',
+            'description': '文件路径和导出目录',
+            'in': 'body',
+            'schema': {'type': 'object'}
+        }],
+        'responses': {
+            '200': {'description': '批量导出结果'}
+        }
+    })
+    @jwt_required()
+    @role_required('admin')
+    def post(self):
+        user = get_jwt_identity()
+        data = request.get_json()
+        file_paths = data.get('file_paths', [])
+        export_dir = data.get('export_dir', './exported')
+        service = CATIAService()
+        service.connect()
+        result = service.export_documents_batch(file_paths, export_dir)
+        audit_log(user, 'batch_export_documents', {'files': file_paths, 'dir': export_dir})
+        return jsonify(result)
+
+# ========== 文件格式转换接口 ==========
+class ExportToFormat(Resource):
+    @swagger.doc({
+        'tags': ['Convert'],
+        'description': '导出为STEP/IGES/STL',
+        'parameters': [{
+            'name': 'body',
+            'description': 'file_path, export_path, fmt',
+            'in': 'body',
+            'schema': {'type': 'object'}
+        }],
+        'responses': {
+            '200': {'description': '导出结果'}
+        }
+    })
+    @jwt_required()
+    @role_required('admin')
+    def post(self):
+        user = get_jwt_identity()
+        data = request.get_json()
+        file_path = data.get('file_path')
+        export_path = data.get('export_path')
+        fmt = data.get('fmt')
+        service = CATIAService()
+        service.connect()
+        result = service.export_to_format(file_path, export_path, fmt)
+        audit_log(user, 'export_to_format', {'file': file_path, 'fmt': fmt})
+        return jsonify({'result': result})
+
+api.add_resource(ExportToFormat, '/api/convert/export')
+
+api.add_resource(BatchSetParameters, '/api/batch/set_parameters')
+api.add_resource(BatchExportDocuments, '/api/batch/export_documents')
