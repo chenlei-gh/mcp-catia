@@ -1,53 +1,147 @@
-# CATIA MCP服务
 
-这是一个基于`pycatia`的CATIA自动化服务，提供了完整的REST API接口，用于远程控制和操作CATIA。
+# CATIA MCP 服务
 
-## 功能特点
 
-- 完整的CATIA操作API支持
-- RESTful API设计
-- JWT认证保护
-- 跨域支持
-- 完整的日志记录
-- 类型提示支持
-- 异常处理机制
+基于 [pycatia](https://github.com/evereux/pycatia) 的 CATIA 自动化 REST API 服务。
+支持模块化建模、AI/知识驱动建模、API分层、异步任务、权限控制、Swagger文档、自动化测试与CI。
 
-## 支持的功能
+## 目录结构
 
-### 1. 文档操作
-- 创建新文档（Part/Product/Drawing）
-- 打开文档
-- 保存文档
-- 关闭文档
 
-### 2. 参数操作
-- 获取参数列表
-- 设置参数值
+```
+catia_mcp_service/
+  app.py                # 主程序入口
+  service.py            # CATIA服务底层
+  di.py                 # 服务工厂/依赖注入
+  api_utils.py          # API异常/日志装饰器
+  permissions.py        # 权限控制
+  schemas.py            # pydantic参数校验
+  swagger.py            # Swagger/OpenAPI集成
+  i18n.py               # 国际化
+  features/             # 各功能模块
+    sketch.py           # 草图建模
+    feature3d.py        # 三维特征
+    object_ops.py       # 对象操作
+    export.py           # 导出/图片
+    batch.py            # 批量操作
+    param_ops.py        # 参数/属性/测量
+    assembly.py         # 装配
+    template.py         # 智能模板建模
+    advanced.py         # 复杂特征
+    history.py          # 建模历史/撤销
+    ai_suggester.py     # AI/知识驱动建模
+  api_sketch.py         # API分层示例
+  api_ai.py             # AI建模API
+  async_tasks.py        # 异步任务队列
+examples/
+tests/
+.github/workflows/ci.yml # CI配置
+requirements.txt
+dev-requirements.txt
+README.md
+```
 
-### 3. 几何操作
-- 创建点
-- 创建线
-- 创建平面
+## 安装
 
-### 4. 草图操作
-- 创建草图
-- 添加线条
-- 添加圆形
+1. 克隆仓库
+   ```bash
+   git clone <repo-url>
+   cd mcp-catia_
+   ```
+2. 安装依赖
+   ```bash
+   pip install -r requirements.txt
+   pip install -r dev-requirements.txt  # 可选，开发/测试
+   ```
 
-### 5. 特征操作
-- 创建凸台
-- 创建凹槽
-- 创建旋转体
+## 快速开始
 
-### 6. 装配操作
-- 添加组件
-- 创建约束
 
-### 7. 测量操作
-- 测量距离
-- 测量角度
-- 测量面积
-- 测量体积
+```bash
+python -m catia_mcp_service.app
+```
+
+## 依赖
+
+详见 requirements.txt 和 dev-requirements.txt。
+
+# 主要功能
+
+- 完整的 CATIA 建模与装配 API（草图、三维特征、装配、参数、测量、导出等）
+- 智能参数化建模模板（如法兰一键建模）
+- 复杂特征（壳体、肋、筋、拔模、扫掠、放样等）
+- AI/知识驱动建模（自然语言转建模、标准件库自动建模）
+- API分层、依赖注入、统一异常与日志
+- JWT权限控制、细粒度角色管理
+- 异步任务队列、批量建模
+- Swagger/OpenAPI自动文档与在线调试
+- pydantic参数校验、类型提示
+- 国际化与多语言支持
+- 单元测试/集成测试、CI自动化
+
+## 典型API
+
+- /api/sketch/create         创建草图
+- /api/feature3d/pad        拉伸特征
+- /api/assembly/add_part    装配添加零件
+- /api/template/flange      智能法兰建模
+- /api/ai/modeling          AI自然语言建模
+- /api/ai/knowledge         标准件库建模
+- /api/image/capture        视图截图
+- /api/batch/set_parameters 批量参数设置
+
+更多API见 features/ 目录与 Swagger 文档。
+
+## 示例
+
+见 examples/ 目录，或参考 tests/ 单元测试。
+
+## 前端/SDK调用
+
+详见 README 末尾“API路由与调用样例”或参考 api_ai.py、api_sketch.py。
+
+
+## 贡献
+
+欢迎 issue 和 PR！建议先阅读 CONTRIBUTING.md（如有）。
+
+## License
+
+MIT
+
+---
+
+## API路由与调用样例
+
+### Python SDK
+```python
+import requests
+token = 'your-jwt-token'
+base_url = 'http://localhost:5000'
+headers = {'Authorization': f'Bearer {token}'}
+params = {'outer_diameter': 100, 'inner_diameter': 50, 'thickness': 10, 'hole_count': 8, 'hole_diameter': 10, 'hole_circle_diameter': 80}
+resp = requests.post(f'{base_url}/api/template/flange', json=params, headers=headers)
+print(resp.json())
+```
+
+### 前端 fetch
+```js
+fetch('/api/template/flange', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + token
+  },
+  body: JSON.stringify({
+    outer_diameter: 100,
+    inner_diameter: 50,
+    thickness: 10,
+    hole_count: 8,
+    hole_diameter: 10,
+    hole_circle_diameter: 80
+  })
+}).then(res => res.json()).then(console.log)
+```
 
 ### 8. 分析操作
 - 质量分析
