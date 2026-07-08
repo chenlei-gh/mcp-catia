@@ -2,16 +2,9 @@
 
 <div align="center">
 
-```
- ██████╗ █████╗ ████████╗██╗ █████╗     ███╗   ███╗ ██████╗██████╗
-██╔════╝██╔══██╗╚══██╔══╝██║██╔══██╗    ████╗ ████║██╔════╝██╔══██╗
-██║     ███████║   ██║   ██║███████║    ██╔████╔██║██║     ██████╔╝
-██║     ██╔══██║   ██║   ██║██╔══██║    ██║╚██╔╝██║██║     ██╔═══╝
-╚██████╗██║  ██║   ██║   ██║██║  ██║    ██║ ╚═╝ ██║╚██████╗██║
- ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═╝    ╚═╝     ╚═╝ ╚═════╝╚═╝
+<h1>🔧 CATIA MCP</h1>
 
-   CATIA Automation REST API · Powered by pycatia
-```
+**CATIA Automation REST API · Powered by pycatia**
 
 <br>
 
@@ -32,7 +25,7 @@
 
 ## 🇬🇧 English
 
-> A comprehensive CATIA automation REST API service built on [pycatia](https://github.com/evereux/pycatia). Modular modeling, AI-driven design, layered API, async tasks, JWT auth, Swagger docs, CI/CD.
+> Comprehensive CATIA automation REST API built on [pycatia](https://github.com/evereux/pycatia). Features modular modeling, AI-driven design, JWT auth, Swagger docs, and async task processing.
 
 ---
 
@@ -48,51 +41,59 @@ pip install -r requirements.txt
 python -m catia_mcp_service.app
 ```
 
-Service starts at `http://localhost:5000` → Swagger UI at `/api/docs`
+**Service URL:** `http://localhost:5000`  
+**Swagger Docs:** `http://localhost:5000/api/docs`
 
 ---
 
-### 🧩 Core Features
+### 🎯 Core Features
 
-| <!-- --> | <!-- --> |
-|---|---|
-| 🎨 **Sketch & 3D** | Sketch creation, Pad, Pocket, Revolution, Hole, Rib, Shell, Draft, Sweep, Loft |
-| 🔧 **Assembly** | Add components, constraints, positioning |
-| 📏 **Parameters & Measure** | Read/write parameters, distance, angle, area, volume, mass |
-| 🤖 **AI Modeling** | Natural language → CATIA model, knowledge-based standard parts |
-| 🧠 **Smart Templates** | One-click parametric modeling (e.g. flange, gear) |
-| 📸 **Export & Capture** | Screenshots, STL, STEP export |
-| 🔐 **JWT Auth** | Token-based access control with role permissions |
-| ⚙️ **Async Tasks** | Background batch processing, progress tracking |
-| 📖 **Swagger** | Auto-generated OpenAPI docs, online testing |
-| 🌍 **i18n** | Multi-language support (EN / ZH) |
+**🎨 Modeling**
+- Sketch creation (lines, circles, rectangles, splines)
+- 3D features: Pad, Pocket, Revolution, Hole, Rib, Shell
+- Advanced: Draft, Sweep, Loft, Pattern
 
----
+**🔧 Assembly & Parameters**
+- Component positioning and constraints
+- Read/write parameters, relations
+- Batch parameter updates
 
-### 📡 API Overview
+**🤖 AI & Automation**
+- Natural language → CATIA models
+- Smart templates (flange, gear, standard parts)
+- Knowledge-driven modeling
 
-```
-POST  /api/connect              Connect to CATIA
-POST  /api/document             Create / open / save / close document
-POST  /api/sketch               Create sketch, add lines, circles
-POST  /api/feature3d            Pad, pocket, revolution, hole...
-POST  /api/assembly             Add component, constraint
-POST  /api/template             Smart parametric modeling (flange, gear...)
-POST  /api/ai/modeling          Natural language → model
-POST  /api/ai/knowledge         Standard parts library
-POST  /api/measure              Distance, angle, area, volume, mass
-POST  /api/image/capture        View screenshot
-POST  /api/batch                Batch parameter setting
-GET   /api/system               System info
-```
-
-> Full API docs: open `/api/docs` after startup
+**⚙️ System**
+- JWT token authentication
+- Role-based access control
+- Async task queue
+- Swagger/OpenAPI documentation
+- Multi-language support (EN/ZH)
 
 ---
 
-### 🐍 Quick Examples
+### 📡 API Endpoints
 
-#### Create a sketch and pad
+| Category | Endpoint | Description |
+|----------|----------|-------------|
+| **Connection** | `POST /api/connect` | Connect to CATIA |
+| **Document** | `POST /api/document` | Create/open/save/close |
+| **Sketch** | `POST /api/sketch` | Create sketch, add geometry |
+| **3D Feature** | `POST /api/feature3d` | Pad, pocket, hole, etc. |
+| **Assembly** | `POST /api/assembly` | Add parts, constraints |
+| **Template** | `POST /api/template` | Smart parametric models |
+| **AI** | `POST /api/ai/modeling` | Natural language modeling |
+| **Measure** | `POST /api/measure` | Distance, angle, mass |
+| **Export** | `POST /api/image/capture` | Screenshot, STL, STEP |
+| **System** | `GET /api/system` | System information |
+
+Full API documentation available at `/api/docs` after startup.
+
+---
+
+### 🐍 Examples
+
+#### Basic: Create and extrude a circle
 
 ```python
 import requests
@@ -101,42 +102,54 @@ from requests.auth import HTTPBasicAuth
 BASE = "http://localhost:5000"
 auth = HTTPBasicAuth("admin", "admin")
 
-# Connect CATIA
+# Connect
 requests.post(f"{BASE}/api/connect", auth=auth)
 
-# Create part document
+# Create part
 requests.post(f"{BASE}/api/document",
-    json={"operation": "create", "doc_type": "Part"}, auth=auth)
+    json={"operation": "create", "doc_type": "Part"}, 
+    auth=auth)
 
-# Create sketch
+# Sketch
 requests.post(f"{BASE}/api/sketch",
-    json={"operation": "create", "plane": "xy"}, auth=auth)
+    json={"operation": "create", "plane": "xy"}, 
+    auth=auth)
 
-# Add circle
+# Circle
 requests.post(f"{BASE}/api/sketch",
-    json={"operation": "add_circle", "center": [0, 0], "radius": 50}, auth=auth)
+    json={
+        "operation": "add_circle",
+        "center": [0, 0],
+        "radius": 50
+    }, auth=auth)
 
 # Pad
 requests.post(f"{BASE}/api/feature3d",
-    json={"operation": "pad", "length": 20}, auth=auth)
+    json={"operation": "pad", "length": 20}, 
+    auth=auth)
 ```
 
-#### Smart flange in one call
+#### Smart template: One-line flange
 
 ```python
-requests.post(f"{BASE}/api/template/flange", json={
-    "outer_diameter": 100, "inner_diameter": 50,
-    "thickness": 10, "hole_count": 8,
-    "hole_diameter": 10, "hole_circle_diameter": 80
-}, auth=auth)
+requests.post(f"{BASE}/api/template/flange", 
+    json={
+        "outer_diameter": 100,
+        "inner_diameter": 50,
+        "thickness": 10,
+        "hole_count": 8,
+        "hole_diameter": 10,
+        "hole_circle_diameter": 80
+    }, auth=auth)
 ```
 
-#### AI natural language modeling
+#### AI: Natural language modeling
 
 ```python
-requests.post(f"{BASE}/api/ai/modeling", json={
-    "prompt": "Create a 100x50mm plate with 4 corner holes of 10mm diameter"
-}, auth=auth)
+requests.post(f"{BASE}/api/ai/modeling",
+    json={
+        "prompt": "Create a 100x50mm plate with 4 corner holes, diameter 10mm"
+    }, auth=auth)
 ```
 
 ---
@@ -147,41 +160,30 @@ requests.post(f"{BASE}/api/ai/modeling", json={
 mcp-catia/
 ├── catia_mcp_service/
 │   ├── app.py               # Main entry
-│   ├── service.py            # CATIA COM core
-│   ├── features/             # Feature modules
-│   │   ├── sketch.py         # Sketches
-│   │   ├── feature3d.py      # 3D features
-│   │   ├── assembly.py       # Assembly
-│   │   ├── object_ops.py     # Object CRUD
-│   │   ├── batch.py          # Batch ops
-│   │   ├── param_ops.py      # Parameters
-│   │   ├── export.py         # Export / capture
-│   │   ├── template.py       # Smart templates
-│   │   ├── advanced.py       # Complex features
-│   │   ├── history.py        # Undo / history
-│   │   └── ai_suggester.py   # AI suggestions
-│   ├── di.py                 # Dependency injection
-│   ├── permissions.py        # JWT + RBAC
-│   ├── schemas.py            # Pydantic validation
-│   ├── swagger.py            # OpenAPI integration
-│   ├── i18n.py               # Internationalization
-│   └── async_tasks.py        # Async queue
-├── examples/                 # Usage examples
-├── tests/                    # Test suite
-└── .github/workflows/ci.yml  # CI/CD
+│   ├── service.py           # CATIA core
+│   ├── features/            # Feature modules
+│   │   ├── sketch.py
+│   │   ├── feature3d.py
+│   │   ├── assembly.py
+│   │   ├── template.py
+│   │   └── ai_suggester.py
+│   ├── permissions.py       # JWT auth
+│   ├── schemas.py           # Validation
+│   └── swagger.py           # API docs
+├── examples/
+├── tests/
+└── requirements.txt
 ```
 
 ---
 
 ### 📦 Requirements
 
-| Dependency | Version |
-|---|---|
-| Python | 3.8+ |
-| CATIA | V5 / V6 |
-| pycatia | 0.8.2+ |
+- **Python**: 3.8+
+- **CATIA**: V5 or V6
+- **pycatia**: 0.8.2+
 
-See `requirements.txt` for full list.
+See `requirements.txt` for full dependencies.
 
 ---
 
@@ -193,7 +195,7 @@ See `requirements.txt` for full list.
 
 ## 🇨🇳 中文
 
-> 基于 [pycatia](https://github.com/evereux/pycatia) 的 CATIA 自动化 REST API 服务。模块化建模、AI 驱动设计、分层 API、异步任务、JWT 鉴权、Swagger 文档、CI/CD。
+> 基于 [pycatia](https://github.com/evereux/pycatia) 的 CATIA 自动化 REST API 服务。支持模块化建模、AI 驱动设计、JWT 鉴权、Swagger 文档和异步任务处理。
 
 ---
 
@@ -209,51 +211,59 @@ pip install -r requirements.txt
 python -m catia_mcp_service.app
 ```
 
-服务启动于 `http://localhost:5000` → Swagger 文档位于 `/api/docs`
+**服务地址:** `http://localhost:5000`  
+**文档地址:** `http://localhost:5000/api/docs`
 
 ---
 
-### 🧩 核心功能
+### 🎯 核心功能
 
-| <!-- --> | <!-- --> |
-|---|---|
-| 🎨 **草图与三维特征** | 草图创建、拉伸、挖槽、旋转、孔、肋、壳、拔模、扫掠、放样 |
-| 🔧 **装配** | 添加零件、约束、定位 |
-| 📏 **参数与测量** | 参数读写、距离、角度、面积、体积、质量 |
-| 🤖 **AI 建模** | 自然语言转 CATIA 模型、知识驱动标准件建模 |
-| 🧠 **智能模板** | 一键参数化建模（法兰、齿轮等） |
-| 📸 **导出与截图** | 视图截图、STL/STEP 导出 |
-| 🔐 **JWT 鉴权** | Token 认证 + 角色权限控制 |
-| ⚙️ **异步任务** | 后台批量处理、进度追踪 |
-| 📖 **Swagger** | 自动生成 OpenAPI 文档，在线调试 |
-| 🌍 **国际化** | 中英文多语言支持 |
+**🎨 建模**
+- 草图创建（直线、圆、矩形、样条线）
+- 三维特征：拉伸、挖槽、旋转、孔、肋、壳
+- 高级特征：拔模、扫掠、放样、阵列
 
----
+**🔧 装配与参数**
+- 组件定位和约束
+- 参数读写、关系式
+- 批量参数更新
 
-### 📡 API 概览
+**🤖 AI 与自动化**
+- 自然语言 → CATIA 模型
+- 智能模板（法兰、齿轮、标准件）
+- 知识驱动建模
 
-```
-POST  /api/connect              连接 CATIA
-POST  /api/document             创建/打开/保存/关闭文档
-POST  /api/sketch               创建草图、添加直线、圆
-POST  /api/feature3d            拉伸、挖槽、旋转、孔...
-POST  /api/assembly             添加组件、约束
-POST  /api/template             智能参数化建模（法兰、齿轮...）
-POST  /api/ai/modeling          自然语言 → 模型
-POST  /api/ai/knowledge         标准件库建模
-POST  /api/measure              距离、角度、面积、体积、质量
-POST  /api/image/capture        视图截图
-POST  /api/batch                批量参数设置
-GET   /api/system               系统信息
-```
-
-> 完整 API 文档：启动后访问 `/api/docs`
+**⚙️ 系统**
+- JWT Token 认证
+- 基于角色的权限控制
+- 异步任务队列
+- Swagger/OpenAPI 文档
+- 多语言支持（中英文）
 
 ---
 
-### 🐍 快速示例
+### 📡 API 端点
 
-#### 创建草图并拉伸
+| 分类 | 端点 | 说明 |
+|------|------|------|
+| **连接** | `POST /api/connect` | 连接 CATIA |
+| **文档** | `POST /api/document` | 创建/打开/保存/关闭 |
+| **草图** | `POST /api/sketch` | 创建草图、添加几何 |
+| **三维特征** | `POST /api/feature3d` | 拉伸、挖槽、孔等 |
+| **装配** | `POST /api/assembly` | 添加零件、约束 |
+| **模板** | `POST /api/template` | 智能参数化模型 |
+| **AI** | `POST /api/ai/modeling` | 自然语言建模 |
+| **测量** | `POST /api/measure` | 距离、角度、质量 |
+| **导出** | `POST /api/image/capture` | 截图、STL、STEP |
+| **系统** | `GET /api/system` | 系统信息 |
+
+完整 API 文档见启动后的 `/api/docs`。
+
+---
+
+### 🐍 示例
+
+#### 基础：创建并拉伸圆
 
 ```python
 import requests
@@ -262,55 +272,65 @@ from requests.auth import HTTPBasicAuth
 BASE = "http://localhost:5000"
 auth = HTTPBasicAuth("admin", "admin")
 
-# 连接 CATIA
+# 连接
 requests.post(f"{BASE}/api/connect", auth=auth)
 
-# 创建零件文档
+# 创建零件
 requests.post(f"{BASE}/api/document",
-    json={"operation": "create", "doc_type": "Part"}, auth=auth)
+    json={"operation": "create", "doc_type": "Part"}, 
+    auth=auth)
 
-# 创建草图
+# 草图
 requests.post(f"{BASE}/api/sketch",
-    json={"operation": "create", "plane": "xy"}, auth=auth)
+    json={"operation": "create", "plane": "xy"}, 
+    auth=auth)
 
-# 添加圆
+# 圆
 requests.post(f"{BASE}/api/sketch",
-    json={"operation": "add_circle", "center": [0, 0], "radius": 50}, auth=auth)
+    json={
+        "operation": "add_circle",
+        "center": [0, 0],
+        "radius": 50
+    }, auth=auth)
 
 # 拉伸
 requests.post(f"{BASE}/api/feature3d",
-    json={"operation": "pad", "length": 20}, auth=auth)
+    json={"operation": "pad", "length": 20}, 
+    auth=auth)
 ```
 
-#### 一键智能法兰
+#### 智能模板：一行法兰
 
 ```python
-requests.post(f"{BASE}/api/template/flange", json={
-    "outer_diameter": 100, "inner_diameter": 50,
-    "thickness": 10, "hole_count": 8,
-    "hole_diameter": 10, "hole_circle_diameter": 80
-}, auth=auth)
+requests.post(f"{BASE}/api/template/flange", 
+    json={
+        "outer_diameter": 100,
+        "inner_diameter": 50,
+        "thickness": 10,
+        "hole_count": 8,
+        "hole_diameter": 10,
+        "hole_circle_diameter": 80
+    }, auth=auth)
 ```
 
-#### AI 自然语言建模
+#### AI：自然语言建模
 
 ```python
-requests.post(f"{BASE}/api/ai/modeling", json={
-    "prompt": "创建一块 100x50mm 的板，四个角各有一个直径 10mm 的孔"
-}, auth=auth)
+requests.post(f"{BASE}/api/ai/modeling",
+    json={
+        "prompt": "创建一块 100x50mm 的板，四角各有直径 10mm 的孔"
+    }, auth=auth)
 ```
 
 ---
 
 ### 📦 依赖
 
-| 依赖 | 版本 |
-|---|---|
-| Python | 3.8+ |
-| CATIA | V5 / V6 |
-| pycatia | 0.8.2+ |
+- **Python**: 3.8+
+- **CATIA**: V5 或 V6
+- **pycatia**: 0.8.2+
 
-完整列表见 `requirements.txt`。
+完整依赖列表见 `requirements.txt`。
 
 ---
 
